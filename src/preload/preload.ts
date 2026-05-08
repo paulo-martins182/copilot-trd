@@ -17,11 +17,20 @@ const api: TradeScopeAPI = {
     getHistory: (input) => ipcRenderer.invoke(channels.analysisGetHistory, input ?? {}) as ReturnType<TradeScopeAPI["analysis"]["getHistory"]>,
     getById: (input) => ipcRenderer.invoke(channels.analysisGetById, input) as ReturnType<TradeScopeAPI["analysis"]["getById"]>
   },
+  marketContext: {
+    refresh: () => ipcRenderer.invoke(channels.marketContextRefresh) as ReturnType<TradeScopeAPI["marketContext"]["refresh"]>,
+    getLatest: () =>
+      ipcRenderer.invoke(channels.marketContextGetLatest) as ReturnType<TradeScopeAPI["marketContext"]["getLatest"]>,
+    getRecentOutcomes: (input) =>
+      ipcRenderer.invoke(channels.marketContextGetRecentOutcomes, input ?? {}) as ReturnType<TradeScopeAPI["marketContext"]["getRecentOutcomes"]>,
+    getSetupPerformance: (input) =>
+      ipcRenderer.invoke(channels.marketContextGetSetupPerformance, input) as ReturnType<TradeScopeAPI["marketContext"]["getSetupPerformance"]>
+  },
   settings: {
     getAll: () => ipcRenderer.invoke(channels.settingsGetAll) as ReturnType<TradeScopeAPI["settings"]["getAll"]>,
     updateRisk: (settings) => ipcRenderer.invoke(channels.settingsUpdateRisk, settings) as ReturnType<TradeScopeAPI["settings"]["updateRisk"]>,
-    updateOpenRouter: (settings) =>
-      ipcRenderer.invoke(channels.settingsUpdateOpenRouter, settings) as ReturnType<TradeScopeAPI["settings"]["updateOpenRouter"]>,
+    updateAI: (settings) =>
+      ipcRenderer.invoke(channels.settingsUpdateOpenRouter, settings) as ReturnType<TradeScopeAPI["settings"]["updateAI"]>,
     updateBrowser: (settings) => ipcRenderer.invoke(channels.settingsUpdateBrowser, settings) as ReturnType<TradeScopeAPI["settings"]["updateBrowser"]>
   },
   journal: {

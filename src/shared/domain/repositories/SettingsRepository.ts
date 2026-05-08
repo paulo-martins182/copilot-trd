@@ -1,8 +1,8 @@
-import type { AppSettings, BrowserSettings, OpenRouterSettings, RiskSettings } from "../entities/Settings";
+import type { AISettings, AppSettings, BrowserSettings, RiskSettings } from "../entities/Settings";
 
 export interface SettingsRepository {
   getAll(): Promise<AppSettings>;
   updateRisk(settings: RiskSettings): Promise<RiskSettings>;
-  updateOpenRouter(settings: OpenRouterSettings): Promise<OpenRouterSettings>;
+  updateAI(settings: AISettings): Promise<AISettings>;
   updateBrowser(settings: BrowserSettings): Promise<BrowserSettings>;
 }

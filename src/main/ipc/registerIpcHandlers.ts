@@ -5,8 +5,11 @@ import type { SnapshotStorage } from "@main/capture/SnapshotStorage";
 import type { AnalyzeFrameUseCase } from "@shared/application/use-cases/AnalyzeFrameUseCase";
 import type { ManageSettingsUseCase } from "@shared/application/use-cases/ManageSettingsUseCase";
 import type { TradeJournalUseCase } from "@shared/application/use-cases/TradeJournalUseCase";
+import type { RefreshMarketContextUseCase } from "@shared/application/use-cases/RefreshMarketContextUseCase";
+import type { MarketContextRepository } from "@shared/domain/repositories/MarketContextRepository";
 import type { AnalysisRepository } from "@shared/domain/repositories/AnalysisRepository";
 import {
+  aiSettingsSchema,
   analyzeFrameRequestSchema,
   browserBoundsSchema,
   browserVisibleSchema,
@@ -15,8 +18,8 @@ import {
   historyRequestSchema,
   idRequestSchema,
   loadUrlSchema,
-  openRouterSettingsSchema,
   riskSettingsSchema,
+  setupLabelRequestSchema,
   tradeJournalCreateSchema
 } from "@shared/presentation/dtos/schemas";
 import { channels } from "./channels";
@@ -29,6 +32,8 @@ interface RegisterIpcHandlersInput {
   settingsUseCase: ManageSettingsUseCase;
   tradeJournalUseCase: TradeJournalUseCase;
   analysisRepository: AnalysisRepository;
+  refreshMarketContextUseCase: RefreshMarketContextUseCase;
+  marketContextRepository: MarketContextRepository;
 }
 
 const lastAlertAtBySignal: Partial<Record<"BUY" | "SELL", string>> = {};
@@ -86,6 +91,25 @@ export function registerIpcHandlers(input: RegisterIpcHandlersInput): void {
     return input.analysisRepository.findById(id);
   });
 
+  ipcMain.handle(channels.marketContextRefresh, async () => {
+    const settings = await input.settingsUseCase.getAll();
+    return input.refreshMarketContextUseCase.execute(settings.ai);
+  });
+
+  ipcMain.handle(channels.marketContextGetLatest, () => {
+    return input.refreshMarketContextUseCase.getLatest();
+  });
+
+  ipcMain.handle(channels.marketContextGetRecentOutcomes, (_event, payload: unknown) => {
+    const parsed = historyRequestSchema.parse(payload ?? {});
+    return input.marketContextRepository.listRecentOutcomes(parsed.limit);
+  });
+
+  ipcMain.handle(channels.marketContextGetSetupPerformance, (_event, payload: unknown) => {
+    const { setupLabel } = setupLabelRequestSchema.parse(payload);
+    return input.marketContextRepository.getSetupPerformance(setupLabel);
+  });
+
   ipcMain.handle(channels.settingsGetAll, () => {
     return input.settingsUseCase.getAll();
   });
@@ -95,7 +119,7 @@ export function registerIpcHandlers(input: RegisterIpcHandlersInput): void {
   });
 
   ipcMain.handle(channels.settingsUpdateOpenRouter, (_event, payload: unknown) => {
-    return input.settingsUseCase.updateOpenRouter(openRouterSettingsSchema.parse(payload));
+    return input.settingsUseCase.updateAI(aiSettingsSchema.parse(payload));
   });
 
   ipcMain.handle(channels.settingsUpdateBrowser, (_event, payload: unknown) => {

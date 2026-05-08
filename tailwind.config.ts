@@ -6,18 +6,21 @@ export default {
   theme: {
     extend: {
       colors: {
-        background: "#07080c",
-        surface: "#0d0f16",
-        panel: "#11141d",
-        border: "#242938",
-        muted: "#8b93a7",
-        accent: "#8b5cf6",
+        background: "#040816",
+        surface: "#09101d",
+        panel: "#0f1728",
+        border: "#1f2b45",
+        muted: "#94a3b8",
+        accent: "#38bdf8",
+        accentSoft: "#a78bfa",
         success: "#22c55e",
         warning: "#f59e0b",
-        danger: "#ef4444"
+        danger: "#ef4444",
+        info: "#2563eb"
       },
       boxShadow: {
-        glow: "0 0 0 1px rgba(139,92,246,.18), 0 24px 80px rgba(0,0,0,.45)"
+        glow: "0 0 0 1px rgba(56,189,248,.14), 0 24px 80px rgba(2,6,23,.52)",
+        panel: "0 18px 56px rgba(2,6,23,.38)"
       }
     }
   },

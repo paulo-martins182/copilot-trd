@@ -1,6 +1,7 @@
-import { app, BrowserWindow, session } from "electron";
+import { app, BrowserWindow, Menu, session } from "electron";
 import { join } from "node:path";
 import { createAppContainer } from "./composition/createAppContainer";
+import { createWindowIcon } from "./electron/createWindowIcon";
 import { registerIpcHandlers } from "./ipc/registerIpcHandlers";
 
 let mainWindow: BrowserWindow | null = null;
@@ -15,6 +16,8 @@ async function createMainWindow(): Promise<void> {
     minHeight: 760,
     backgroundColor: "#07080c",
     title: "TradeScope AI",
+    autoHideMenuBar: true,
+    icon: createWindowIcon(),
     webPreferences: {
       preload: join(__dirname, "../preload/preload.mjs"),
       nodeIntegration: false,
@@ -25,6 +28,8 @@ async function createMainWindow(): Promise<void> {
 
   container.browserWorkspace.attach(mainWindow);
   registerIpcHandlers(container);
+  Menu.setApplicationMenu(null);
+  mainWindow.setMenuBarVisibility(false);
 
   session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
     callback(["media", "display-capture"].includes(permission));

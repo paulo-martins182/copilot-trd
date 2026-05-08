@@ -12,7 +12,9 @@ export function isHighProbabilitySignal(record: AnalysisRecord): boolean {
   return (
     record.decision.shouldAlert &&
     (record.decision.finalSignal === "BUY" || record.decision.finalSignal === "SELL") &&
-    record.ai.confidence >= 75 &&
+    record.decision.providerMode === "REAL" &&
+    record.decision.empiricalWinRate >= 80 &&
+    record.decision.sampleSupport >= 5 &&
     record.ai.riskLevel === "LOW" &&
     !record.isStale
   );
@@ -34,10 +36,10 @@ export function SignalToastStack({ items }: { items: SignalToastItem[] }) {
               <Badge tone={item.record.decision.finalSignal === "BUY" ? "success" : "danger"}>
                 {formatSignal(item.record.decision.finalSignal)}
               </Badge>
-              <span className="text-xs text-muted">{item.record.ai.confidence}% confiança</span>
+              <span className="text-xs text-muted">{item.record.decision.empiricalWinRate}% win est.</span>
             </div>
             <div className="text-sm font-semibold text-white">
-              Momento forte · {formatExpiry(item.record.decision.finalExpiry)} · até{" "}
+              Momento forte · {formatExpiry(item.record.decision.finalExpiry)} · ate{" "}
               {formatCurrency(item.record.decision.suggestedStake)}
             </div>
             <div className="mt-1 text-xs text-zinc-300">{item.record.ai.reasoning}</div>

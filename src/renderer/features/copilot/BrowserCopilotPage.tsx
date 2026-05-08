@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { AnalysisRecord, CaptureRegion } from "@shared/domain/entities/Analysis";
+import type { MarketContextSnapshot, ShadowPrediction } from "@shared/domain/entities/MarketContext";
 import type { BrowserCaptureResult, CaptureSource } from "@shared/domain/services/ScreenCaptureProvider";
 import type { AppSettings } from "@shared/domain/entities/Settings";
 import { AnalysisCard } from "@renderer/components/composition/AnalysisCard";
@@ -9,6 +10,7 @@ import { Button } from "@renderer/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@renderer/components/ui/card";
 import { Input, Label } from "@renderer/components/ui/input";
 import { useBrowserBounds } from "@renderer/hooks/useBrowserBounds";
+import { formatDateTime, formatMacroRisk, formatMarketBias } from "@renderer/lib/format";
 import { playSignalBeep } from "@renderer/lib/sound";
 
 interface BrowserCopilotPageProps {
@@ -27,6 +29,8 @@ export function BrowserCopilotPage({ onAnalysis, onAlert, onOpenAnalysis }: Brow
   const [lastAnalysis, setLastAnalysis] = useState<AnalysisRecord | null>(null);
   const [isCopilotActive, setIsCopilotActive] = useState(false);
   const [sources, setSources] = useState<CaptureSource[]>([]);
+  const [marketContext, setMarketContext] = useState<MarketContextSnapshot | null>(null);
+  const [recentOutcomes, setRecentOutcomes] = useState<ShadowPrediction[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useBrowserBounds(browserHostRef, true);
@@ -38,46 +42,58 @@ export function BrowserCopilotPage({ onAnalysis, onAlert, onOpenAnalysis }: Brow
       void window.tradeScope.browser.loadUrl({ url: loaded.browser.defaultUrl });
     });
     void window.tradeScope.capture.listSources().then(setSources).catch(() => setSources([]));
+    void window.tradeScope.marketContext.getLatest().then(setMarketContext);
+    void window.tradeScope.marketContext.getRecentOutcomes({ limit: 8 }).then(setRecentOutcomes);
   }, []);
+
+  const refreshAuxData = async () => {
+    const [context, outcomes] = await Promise.all([
+      window.tradeScope.marketContext.getLatest(),
+      window.tradeScope.marketContext.getRecentOutcomes({ limit: 8 })
+    ]);
+    setMarketContext(context);
+    setRecentOutcomes(outcomes);
+  };
 
   const loadUrl = async () => {
     setError(null);
     await window.tradeScope.browser.loadUrl({ url });
     if (settings) {
-      await window.tradeScope.settings.updateBrowser({ defaultUrl: url });
+      await window.tradeScope.settings.updateBrowser({
+        ...settings.browser,
+        defaultUrl: url
+      });
     }
   };
 
-  const captureOnce = useCallback(async () => {
+  const captureOnce = async () => {
     setError(null);
     const capture = await window.tradeScope.browser.captureRegion(region);
     setLastCapture(capture);
     return capture;
-  }, [region]);
+  };
 
-  const analyzeCapture = useCallback(
-    async (capture: BrowserCaptureResult) => {
-      const record = await window.tradeScope.analysis.analyzeFrame({
-        dataUrl: capture.dataUrl,
-        metadata: {
-          sourceType: "BROWSER",
-          sourceId: "tradingview-webcontentsview",
-          region: capture.region,
-          capturedAt: capture.capturedAt
-        }
-      });
-      setLastAnalysis(record);
-      onAnalysis(record);
-      if (record.decision.shouldAlert) {
-        playSignalBeep();
-        onAlert(record);
+  const analyzeCapture = async (capture: BrowserCaptureResult) => {
+    const record = await window.tradeScope.analysis.analyzeFrame({
+      dataUrl: capture.dataUrl,
+      metadata: {
+        sourceType: "BROWSER",
+        sourceId: "tradingview-webcontentsview",
+        region: capture.region,
+        capturedAt: capture.capturedAt
       }
-      return record;
-    },
-    [onAlert, onAnalysis]
-  );
+    });
+    setLastAnalysis(record);
+    onAnalysis(record);
+    await refreshAuxData();
+    if (record.decision.shouldAlert) {
+      playSignalBeep();
+      onAlert(record);
+    }
+    return record;
+  };
 
-  const captureAndAnalyze = useCallback(async () => {
+  const captureAndAnalyze = async () => {
     if (inFlightRef.current) return;
     inFlightRef.current = true;
     try {
@@ -88,7 +104,7 @@ export function BrowserCopilotPage({ onAnalysis, onAlert, onOpenAnalysis }: Brow
     } finally {
       inFlightRef.current = false;
     }
-  }, [analyzeCapture, captureOnce]);
+  };
 
   useEffect(() => {
     if (!isCopilotActive) return;
@@ -97,7 +113,7 @@ export function BrowserCopilotPage({ onAnalysis, onAlert, onOpenAnalysis }: Brow
       void captureAndAnalyze();
     }, 2000);
     return () => window.clearInterval(interval);
-  }, [captureAndAnalyze, isCopilotActive]);
+  }, [isCopilotActive]);
 
   const useFullRegion = () => {
     const bounds = browserHostRef.current?.getBoundingClientRect();
@@ -115,28 +131,51 @@ export function BrowserCopilotPage({ onAnalysis, onAlert, onOpenAnalysis }: Brow
         <Card className="flex items-center gap-3 p-3">
           <Label className="mb-0 w-28">URL</Label>
           <Input value={url} onChange={(event) => setUrl(event.target.value)} />
-          <Button onClick={loadUrl}>Abrir</Button>
+          <Button onClick={() => void loadUrl()}>Abrir</Button>
           <Badge tone={isCopilotActive ? "success" : "neutral"}>{isCopilotActive ? "Copilot ativo" : "Copilot parado"}</Badge>
         </Card>
         <div ref={browserHostRef} className="relative min-h-0 flex-1 overflow-hidden rounded-2xl border border-border bg-black/30">
           <div className="pointer-events-none absolute inset-0 grid place-items-center text-sm text-muted">
-            Navegador embutido carregando TradingView…
+            Navegador embutido carregando TradingView...
           </div>
         </div>
       </section>
 
       <aside className="min-h-0 space-y-4 overflow-y-auto pr-1">
         <Card>
-          <CardTitle>Copiloto de gráfico</CardTitle>
+          <CardTitle>Copiloto BTC / 2m</CardTitle>
           <CardDescription>
-            Analisa frames a cada 2s e alerta somente sinais aprovados por regras locais.
+            Analisa frames a cada 2s, aplica consenso temporal, contexto macro e suporte empirico antes de alertar.
           </CardDescription>
-          {settings?.openrouter.apiKey || settings?.openrouter.useMockProvider ? null : (
+          {settings?.risk.requireRealProvider && lastAnalysis?.decision.providerMode !== "REAL" ? (
             <div className="mt-3 rounded-xl border border-warning/30 bg-warning/10 p-3 text-xs text-amber-200">
-              Sem OpenRouter API Key: o provider mock será usado para validar o fluxo.
+              Modo real obrigatorio ativo. Sem provider real, BUY/SELL ficam bloqueados.
             </div>
-          )}
+          ) : null}
+          {lastAnalysis?.decision.providerMode !== "REAL" && lastAnalysis?.ai.warning ? (
+            <div className="mt-3 rounded-xl border border-danger/30 bg-danger/10 p-3 text-xs text-red-200">
+              Motivo do REAL OFF: {lastAnalysis.ai.warning}
+            </div>
+          ) : null}
         </Card>
+
+        {marketContext ? (
+          <Card>
+            <CardTitle>Contexto diario de mercado</CardTitle>
+            <CardDescription>
+              {formatMarketBias(marketContext.marketBias)} / {formatMacroRisk(marketContext.riskState)}
+            </CardDescription>
+            <div className="mt-3 rounded-xl bg-white/[0.03] p-3 text-sm text-zinc-300">{marketContext.analysisImpact}</div>
+            <div className="mt-3 space-y-2">
+              {marketContext.majorEvents.map((event) => (
+                <div key={event} className="rounded-xl border border-border bg-black/20 p-2 text-xs text-zinc-300">
+                  {event}
+                </div>
+              ))}
+            </div>
+            <div className="mt-3 text-xs text-muted">Atualizado em {formatDateTime(marketContext.updatedAt)}</div>
+          </Card>
+        ) : null}
 
         <CapturePanel.Root>
           <CapturePanel.RegionSelector region={region} onChange={setRegion} />
@@ -152,7 +191,7 @@ export function BrowserCopilotPage({ onAnalysis, onAlert, onOpenAnalysis }: Brow
         {error ? <div className="rounded-xl border border-danger/30 bg-danger/10 p-3 text-sm text-red-200">{error}</div> : null}
 
         <AnalysisCard.Root>
-          <AnalysisCard.Header description="Resultado mais recente após IA + rule engine." />
+          <AnalysisCard.Header description="Resultado mais recente apos IA + precision gating." />
           <AnalysisCard.Signal record={lastAnalysis} />
           <AnalysisCard.Confidence record={lastAnalysis} />
           <AnalysisCard.Reasoning record={lastAnalysis} />
@@ -164,6 +203,23 @@ export function BrowserCopilotPage({ onAnalysis, onAlert, onOpenAnalysis }: Brow
             </Button>
           </AnalysisCard.Actions>
         </AnalysisCard.Root>
+
+        <Card>
+          <CardTitle>Shadow outcomes</CardTitle>
+          <CardDescription>Resultados recentes usados para calibrar o setup BTC/2m.</CardDescription>
+          <div className="mt-3 space-y-2">
+            {recentOutcomes.map((outcome) => (
+              <div key={outcome.id} className="rounded-xl border border-border bg-black/20 p-3 text-xs text-zinc-300">
+                <div className="font-medium text-white">
+                  {outcome.expectedSignal} · {outcome.outcome ?? "PENDENTE"}
+                </div>
+                <div>{outcome.setupLabel}</div>
+                <div className="mt-1 text-muted">{outcome.outcomeReason ?? "Aguardando janela de 2 minutos."}</div>
+              </div>
+            ))}
+            {recentOutcomes.length === 0 ? <div className="text-sm text-muted">Nenhum outcome recente ainda.</div> : null}
+          </div>
+        </Card>
       </aside>
     </div>
   );

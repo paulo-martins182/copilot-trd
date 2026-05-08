@@ -5,7 +5,8 @@ export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElem
   return (
     <input
       className={cn(
-        "w-full rounded-xl border border-border bg-black/20 px-3 py-2 text-sm text-white outline-none transition placeholder:text-muted focus:border-accent/60 focus:ring-2 focus:ring-accent/20",
+        "w-full rounded-2xl border border-border/90 bg-slate-950/40 px-3 py-2 text-sm text-white outline-none transition",
+        "placeholder:text-muted focus:border-accent/60 focus:ring-2 focus:ring-accent/20",
         className
       )}
       {...props}
@@ -17,7 +18,8 @@ export function Textarea({ className, ...props }: TextareaHTMLAttributes<HTMLTex
   return (
     <textarea
       className={cn(
-        "min-h-24 w-full rounded-xl border border-border bg-black/20 px-3 py-2 text-sm text-white outline-none transition placeholder:text-muted focus:border-accent/60 focus:ring-2 focus:ring-accent/20",
+        "min-h-24 w-full rounded-2xl border border-border/90 bg-slate-950/40 px-3 py-2 text-sm text-white outline-none transition",
+        "placeholder:text-muted focus:border-accent/60 focus:ring-2 focus:ring-accent/20",
         className
       )}
       {...props}
@@ -26,5 +28,5 @@ export function Textarea({ className, ...props }: TextareaHTMLAttributes<HTMLTex
 }
 
 export function Label({ className, ...props }: LabelHTMLAttributes<HTMLLabelElement>) {
-  return <label className={cn("mb-1 block text-xs font-medium uppercase tracking-wide text-muted", className)} {...props} />;
+  return <label className={cn("mb-1 block text-[11px] font-semibold uppercase tracking-[0.18em] text-muted", className)} {...props} />;
 }

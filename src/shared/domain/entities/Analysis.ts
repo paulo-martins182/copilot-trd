@@ -3,6 +3,7 @@ export type RiskLevel = "LOW" | "MEDIUM" | "HIGH";
 export type MarketCondition = "TRENDING" | "RANGING" | "VOLATILE" | "UNCLEAR";
 export type SuggestedExpiry = "ONE_MINUTE" | "TWO_MINUTES" | "FIVE_MINUTES" | "NONE";
 export type SourceType = "BROWSER" | "SCREEN";
+export type ProviderMode = "REAL" | "MOCK" | "REAL_PROVIDER_UNAVAILABLE" | "SHADOW_ONLY";
 
 export interface AnalysisChecklistItem {
   label: string;
@@ -27,6 +28,12 @@ export interface AnalysisDecision {
   suggestedStake: number;
   ruleReasons: string[];
   shouldAlert: boolean;
+  providerMode: ProviderMode;
+  consensusScore: number;
+  empiricalWinRate: number;
+  sampleSupport: number;
+  macroContextApplied: boolean;
+  blockedBy: string[];
 }
 
 export interface FrameMetadata {
@@ -55,4 +62,5 @@ export interface AnalysisRecord {
   snapshotPath: string;
   ai: AIAnalysis;
   decision: AnalysisDecision;
+  setupLabel: string;
 }

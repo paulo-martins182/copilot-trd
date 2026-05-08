@@ -1,5 +1,5 @@
 import type { SettingsRepository } from "@shared/domain/repositories/SettingsRepository";
-import type { BrowserSettings, OpenRouterSettings, RiskSettings } from "@shared/domain/entities/Settings";
+import type { AISettings, BrowserSettings, RiskSettings } from "@shared/domain/entities/Settings";
 
 export class ManageSettingsUseCase {
   public constructor(private readonly repository: SettingsRepository) {}
@@ -12,8 +12,8 @@ export class ManageSettingsUseCase {
     return this.repository.updateRisk(settings);
   }
 
-  public updateOpenRouter(settings: OpenRouterSettings) {
-    return this.repository.updateOpenRouter(settings);
+  public updateAI(settings: AISettings) {
+    return this.repository.updateAI(settings);
   }
 
   public updateBrowser(settings: BrowserSettings) {

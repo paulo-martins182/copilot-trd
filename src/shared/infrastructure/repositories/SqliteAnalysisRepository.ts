@@ -12,6 +12,7 @@ interface AnalysisRow {
   latency_ms: number;
   is_stale: 0 | 1;
   snapshot_path: string;
+  setup_label: string;
   ai_json: string;
   decision_json: string;
 }
@@ -24,8 +25,8 @@ export class SqliteAnalysisRepository implements AnalysisRepository {
       `
       INSERT INTO analyses (
         id, created_at, source_type, source_id, captured_at, analyzed_at,
-        latency_ms, is_stale, snapshot_path, ai_json, decision_json
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        latency_ms, is_stale, snapshot_path, setup_label, ai_json, decision_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
       [
         record.id,
@@ -37,6 +38,7 @@ export class SqliteAnalysisRepository implements AnalysisRepository {
         record.latencyMs,
         record.isStale ? 1 : 0,
         record.snapshotPath,
+        record.setupLabel,
         JSON.stringify(record.ai),
         JSON.stringify(record.decision)
       ]
@@ -65,6 +67,7 @@ export class SqliteAnalysisRepository implements AnalysisRepository {
       latencyMs: row.latency_ms,
       isStale: row.is_stale === 1,
       snapshotPath: row.snapshot_path,
+      setupLabel: row.setup_label,
       ai: JSON.parse(row.ai_json) as AnalysisRecord["ai"],
       decision: JSON.parse(row.decision_json) as AnalysisRecord["decision"]
     };

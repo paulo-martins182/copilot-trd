@@ -1,5 +1,6 @@
 import type { AnalysisRecord, CaptureRegion } from "@shared/domain/entities/Analysis";
-import type { AppSettings, BrowserSettings, OpenRouterSettings, RiskSettings } from "@shared/domain/entities/Settings";
+import type { MarketContextSnapshot, ShadowPrediction, SetupPerformance } from "@shared/domain/entities/MarketContext";
+import type { AISettings, AppSettings, BrowserSettings, RiskSettings } from "@shared/domain/entities/Settings";
 import type { CaptureSource, BrowserBounds, BrowserCaptureResult } from "@shared/domain/services/ScreenCaptureProvider";
 import type { TradeJournalEntry, TradeJournalMetrics } from "@shared/domain/entities/TradeJournal";
 
@@ -26,10 +27,16 @@ export interface TradeScopeAPI {
     getHistory(input?: { limit?: number }): Promise<AnalysisRecord[]>;
     getById(input: { id: string }): Promise<AnalysisRecord | null>;
   };
+  marketContext: {
+    refresh(): Promise<MarketContextSnapshot>;
+    getLatest(): Promise<MarketContextSnapshot | null>;
+    getRecentOutcomes(input?: { limit?: number }): Promise<ShadowPrediction[]>;
+    getSetupPerformance(input: { setupLabel: string }): Promise<SetupPerformance>;
+  };
   settings: {
     getAll(): Promise<AppSettings>;
     updateRisk(settings: RiskSettings): Promise<RiskSettings>;
-    updateOpenRouter(settings: OpenRouterSettings): Promise<OpenRouterSettings>;
+    updateAI(settings: AISettings): Promise<AISettings>;
     updateBrowser(settings: BrowserSettings): Promise<BrowserSettings>;
   };
   journal: {

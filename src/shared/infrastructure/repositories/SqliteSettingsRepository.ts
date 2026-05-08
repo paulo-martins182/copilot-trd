@@ -2,12 +2,12 @@ import type { SafeStorage } from "electron";
 import type { SettingsRepository } from "@shared/domain/repositories/SettingsRepository";
 import type { SqliteDatabase } from "@shared/infrastructure/database/SqliteDatabase";
 import {
+  defaultAISettings,
   defaultBrowserSettings,
-  defaultOpenRouterSettings,
   defaultRiskSettings,
+  type AISettings,
   type AppSettings,
   type BrowserSettings,
-  type OpenRouterSettings,
   type RiskSettings
 } from "@shared/domain/entities/Settings";
 
@@ -24,9 +24,11 @@ export class SqliteSettingsRepository implements SettingsRepository {
   ) {}
 
   public async getAll(): Promise<AppSettings> {
+    const rawAISettings = this.getRawJson("ai") ?? this.getRawJson("openrouter");
+
     return {
       risk: this.getJson("risk", defaultRiskSettings),
-      openrouter: this.decodeOpenRouterSettings(this.getJson("openrouter", defaultOpenRouterSettings)),
+      ai: this.decodeAISettings(rawAISettings),
       browser: this.getJson("browser", defaultBrowserSettings)
     };
   }
@@ -36,8 +38,8 @@ export class SqliteSettingsRepository implements SettingsRepository {
     return settings;
   }
 
-  public async updateOpenRouter(settings: OpenRouterSettings): Promise<OpenRouterSettings> {
-    this.setJson("openrouter", this.encodeOpenRouterSettings(settings));
+  public async updateAI(settings: AISettings): Promise<AISettings> {
+    this.setJson("ai", this.encodeAISettings(settings));
     return settings;
   }
 
@@ -52,6 +54,12 @@ export class SqliteSettingsRepository implements SettingsRepository {
     return { ...fallback, ...(JSON.parse(row.value) as Partial<T>) };
   }
 
+  private getRawJson(key: string): Record<string, unknown> | null {
+    const row = this.db.get<SettingsRow>("SELECT * FROM settings WHERE key = ?", [key]);
+    if (!row) return null;
+    return JSON.parse(row.value) as Record<string, unknown>;
+  }
+
   private setJson(key: string, value: unknown): void {
     this.db.run(
       `
@@ -64,42 +72,67 @@ export class SqliteSettingsRepository implements SettingsRepository {
     void this.db.persist();
   }
 
-  private encodeOpenRouterSettings(settings: OpenRouterSettings): Record<string, unknown> {
-    const apiKey = settings.apiKey?.trim();
-    if (!apiKey) {
-      return {
-        model: settings.model,
-        fallbackModel: settings.fallbackModel,
-        useMockProvider: settings.useMockProvider
-      };
+  private encodeAISettings(settings: AISettings): Record<string, unknown> {
+    const payload: Record<string, unknown> = {
+      provider: settings.provider,
+      model: settings.model,
+      fallbackModel: settings.fallbackModel,
+      useMockProvider: settings.useMockProvider
+    };
+    const openRouterApiKey = settings.openRouterApiKey?.trim();
+    const googleApiKey = settings.googleApiKey?.trim();
+    if (this.safeStorage?.isEncryptionAvailable()) {
+      if (openRouterApiKey) {
+        payload.encryptedOpenRouterApiKey = this.safeStorage.encryptString(openRouterApiKey).toString("base64");
+      }
+      if (googleApiKey) {
+        payload.encryptedGoogleApiKey = this.safeStorage.encryptString(googleApiKey).toString("base64");
+      }
+      return payload;
+    }
+
+    if (openRouterApiKey) {
+      payload.openRouterApiKey = openRouterApiKey;
+    }
+    if (googleApiKey) {
+      payload.googleApiKey = googleApiKey;
+    }
+    return payload;
+  }
+
+  private decodeAISettings(
+    raw: (Partial<AISettings> & {
+      apiKey?: string;
+      encryptedApiKey?: string;
+      encryptedOpenRouterApiKey?: string;
+      encryptedGoogleApiKey?: string;
+    }) | null
+  ): AISettings {
+    if (!raw) {
+      return defaultAISettings;
+    }
+
+    const decoded: AISettings = {
+      ...defaultAISettings,
+      ...raw
+    };
+
+    if (raw.apiKey && !decoded.openRouterApiKey) {
+      decoded.openRouterApiKey = raw.apiKey;
     }
 
     if (this.safeStorage?.isEncryptionAvailable()) {
-      return {
-        model: settings.model,
-        fallbackModel: settings.fallbackModel,
-        useMockProvider: settings.useMockProvider,
-        encryptedApiKey: this.safeStorage.encryptString(apiKey).toString("base64")
-      };
+      if (raw.encryptedApiKey && !decoded.openRouterApiKey) {
+        decoded.openRouterApiKey = this.safeStorage.decryptString(Buffer.from(raw.encryptedApiKey, "base64"));
+      }
+      if (raw.encryptedOpenRouterApiKey) {
+        decoded.openRouterApiKey = this.safeStorage.decryptString(Buffer.from(raw.encryptedOpenRouterApiKey, "base64"));
+      }
+      if (raw.encryptedGoogleApiKey) {
+        decoded.googleApiKey = this.safeStorage.decryptString(Buffer.from(raw.encryptedGoogleApiKey, "base64"));
+      }
     }
 
-    return {
-      model: settings.model,
-      fallbackModel: settings.fallbackModel,
-      useMockProvider: settings.useMockProvider,
-      apiKey
-    };
-  }
-
-  private decodeOpenRouterSettings(raw: OpenRouterSettings & { encryptedApiKey?: string }): OpenRouterSettings {
-    if (raw.encryptedApiKey && this.safeStorage?.isEncryptionAvailable()) {
-      return {
-        model: raw.model,
-        fallbackModel: raw.fallbackModel,
-        useMockProvider: raw.useMockProvider,
-        apiKey: this.safeStorage.decryptString(Buffer.from(raw.encryptedApiKey, "base64"))
-      };
-    }
-    return raw;
+    return decoded;
   }
 }

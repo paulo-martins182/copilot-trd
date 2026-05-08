@@ -1,107 +1,156 @@
 import type { AIAnalysisProvider, AnalyzeFrameProviderInput } from "@shared/domain/services/AIAnalysisProvider";
 import { aiAnalysisSchema } from "@shared/presentation/dtos/schemas";
 import { tradingVisionSystemPrompt } from "../ai/tradingVisionPrompt";
+import { OpenRouterClient } from "./OpenRouterClient";
 import { openRouterAnalysisResponseFormat } from "./openRouterAnalysisJsonSchema";
 
-interface OpenRouterChatResponse {
-  model?: string;
-  choices?: Array<{
-    message?: {
-      content?: string | Array<{ type?: string; text?: string }>;
-    };
-  }>;
-  error?: {
-    message?: string;
-  };
+type OpenRouterMessage = Record<string, unknown>;
+
+const curatedFreeVisionModels = [
+  "google/gemma-4-26b-a4b-it:free",
+  "google/gemma-4-31b-it:free",
+  "openrouter/free"
+] as const;
+
+function shouldRetryWithoutStructuredOutput(error: unknown) {
+  return (
+    error instanceof Error &&
+    /No endpoints found that can handle the requested parameters|response_format|provider routing|structured/i.test(
+      error.message
+    )
+  );
 }
 
-type OpenRouterMessageContent = string | Array<{ type?: string; text?: string }> | undefined;
+function shouldTryNextModel(error: unknown) {
+  return (
+    error instanceof Error &&
+    /Provider returned error|did not include text content|503|502|429|temporar|timeout|overloaded|No endpoints found/i.test(
+      error.message
+    )
+  );
+}
+
+function createModelsToTry(primaryModel: string, fallbackModel: string) {
+  return [...new Set([primaryModel, fallbackModel, ...curatedFreeVisionModels])];
+}
 
 export class OpenRouterVisionProvider implements AIAnalysisProvider {
+  private readonly client = new OpenRouterClient();
+
   public async analyzeFrame(input: AnalyzeFrameProviderInput) {
-    if (input.settings.useMockProvider || !input.settings.apiKey) {
+    if (input.settings.useMockProvider) {
       return new MockAIAnalysisProvider().analyzeFrame(input);
     }
+    if (!input.settings.openRouterApiKey) {
+      return this.unavailableResult("API key da OpenRouter ausente.");
+    }
 
-    const primaryModel = input.settings.model || "google/gemma-4-31b-it:free";
-    const fallbackModel = input.settings.fallbackModel || "openrouter/free";
-    const modelsToTry = primaryModel === fallbackModel ? [primaryModel] : [primaryModel, fallbackModel];
-    let lastError: unknown;
+    const primaryModel = input.settings.model || "google/gemma-4-26b-a4b-it:free";
+    const fallbackModel = input.settings.fallbackModel || "google/gemma-4-31b-it:free";
+    const modelsToTry = createModelsToTry(primaryModel, fallbackModel);
+    const errorsByModel: string[] = [];
 
     for (const model of modelsToTry) {
       try {
-        return await this.requestAnalysis(input, model);
+        const systemMessage: OpenRouterMessage = {
+          role: "system",
+          content: tradingVisionSystemPrompt
+        };
+        const userMessage: OpenRouterMessage = {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text:
+                "Analise este frame do grafico BTC/crypto. Bloqueie entrada ruim, detecte mercado lateral, destaque risco alto e retorne checklist visual."
+            },
+            {
+              type: "image_url",
+              image_url: {
+                url: input.dataUrl
+              }
+            }
+          ]
+        };
+        const messages: OpenRouterMessage[] = [systemMessage, userMessage];
+
+        let parsed: unknown;
+
+        try {
+          parsed = await this.client.completeJson({
+            apiKey: input.settings.openRouterApiKey,
+            model,
+            messages,
+            responseFormat: openRouterAnalysisResponseFormat,
+            maxTokens: 900
+          });
+        } catch (error) {
+          if (!shouldRetryWithoutStructuredOutput(error)) {
+            throw error;
+          }
+
+          parsed = await this.client.completeJson({
+            apiKey: input.settings.openRouterApiKey,
+            model,
+            messages: [
+              {
+                role: "system",
+                content: `${tradingVisionSystemPrompt}
+
+Retorne somente JSON puro, sem markdown, sem comentarios e sem texto antes ou depois do objeto.
+Estrutura obrigatoria:
+{
+  "signal": "BUY|SELL|WAIT|AVOID",
+  "confidence": 0,
+  "riskLevel": "LOW|MEDIUM|HIGH",
+  "marketCondition": "TRENDING|RANGING|VOLATILE|UNCLEAR",
+  "suggestedExpiry": "ONE_MINUTE|TWO_MINUTES|FIVE_MINUTES|NONE",
+  "reasoning": "texto curto",
+  "checklist": [{ "label": "texto", "passed": true }],
+  "warning": "texto curto"
+}`
+              },
+              userMessage
+            ],
+            maxTokens: 900
+          });
+        }
+
+        return {
+          analysis: aiAnalysisSchema.parse(parsed),
+          providerMode: "REAL" as const,
+          modelUsed: model
+        };
       } catch (error) {
-        lastError = error;
+        const reason = error instanceof Error ? error.message : `Falha desconhecida no modelo ${model}.`;
+        errorsByModel.push(`${model}: ${reason}`);
+        if (!shouldTryNextModel(error)) {
+          break;
+        }
       }
     }
 
-    throw lastError instanceof Error ? lastError : new Error("OpenRouter analysis failed.");
+    return this.unavailableResult(errorsByModel.join(" | ") || "OpenRouter analysis failed.");
   }
 
-  private async requestAnalysis(input: AnalyzeFrameProviderInput, model: string) {
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${input.settings.apiKey}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://tradescope-ai.local",
-        "X-Title": "TradeScope AI"
-      },
-      body: JSON.stringify({
-        model,
-        messages: [
-          {
-            role: "system",
-            content: tradingVisionSystemPrompt
-          },
-          {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text:
-                  "Analise este frame do gráfico. Bloqueie entrada ruim, detecte mercado lateral, destaque risco alto e retorne checklist visual."
-              },
-              {
-                type: "image_url",
-                image_url: {
-                  url: input.dataUrl
-                }
-              }
-            ]
-          }
+  private unavailableResult(reason: string) {
+    return {
+      analysis: aiAnalysisSchema.parse({
+        signal: "WAIT",
+        confidence: 0,
+        riskLevel: "HIGH",
+        marketCondition: "UNCLEAR",
+        suggestedExpiry: "NONE",
+        reasoning: "Provider real indisponivel; entrada operacional bloqueada.",
+        checklist: [
+          { label: "Provider real disponivel", passed: false },
+          { label: "Contexto tecnico confiavel", passed: false }
         ],
-        response_format: openRouterAnalysisResponseFormat,
-        provider: {
-          require_parameters: true
-        },
-        temperature: 0.1,
-        max_tokens: 900,
-        stream: false
-      })
-    });
-
-    const payload = (await response.json()) as OpenRouterChatResponse;
-    if (!response.ok) {
-      throw new Error(payload.error?.message ?? `OpenRouter request failed with status ${response.status}.`);
-    }
-
-    const content = payload.choices?.[0]?.message?.content;
-    const text = this.extractText(content);
-    const parsed = JSON.parse(text);
-    return aiAnalysisSchema.parse(parsed);
-  }
-
-  private extractText(content: OpenRouterMessageContent): string {
-    if (typeof content === "string") return content;
-    if (Array.isArray(content)) {
-      return content
-        .map((part: { type?: string; text?: string }) => (part.type === "text" ? part.text : ""))
-        .filter(Boolean)
-        .join("");
-    }
-    throw new Error("OpenRouter response did not include text content.");
+        warning: reason
+      }),
+      providerMode: "REAL_PROVIDER_UNAVAILABLE" as const,
+      modelUsed: "unavailable"
+    };
   }
 }
 
@@ -109,23 +158,27 @@ export class MockAIAnalysisProvider implements AIAnalysisProvider {
   public async analyzeFrame(input: AnalyzeFrameProviderInput) {
     const second = new Date(input.metadata.capturedAt).getSeconds();
     const signal = second % 13 === 0 ? "BUY" : second % 19 === 0 ? "SELL" : "WAIT";
-    return aiAnalysisSchema.parse({
-      signal,
-      confidence: signal === "WAIT" ? 58 : 76,
-      riskLevel: signal === "WAIT" ? "MEDIUM" : "LOW",
-      marketCondition: signal === "WAIT" ? "RANGING" : "TRENDING",
-      suggestedExpiry: signal === "WAIT" ? "NONE" : "TWO_MINUTES",
-      reasoning:
-        signal === "WAIT"
-          ? "Modo mock: mercado tratado como lateral ou sem confirmação suficiente."
-          : "Modo mock: sinal demonstrativo aprovado para validar toast e alerta.",
-      checklist: [
-        { label: "Tendência clara", passed: signal !== "WAIT" },
-        { label: "Mercado não lateral", passed: signal !== "WAIT" },
-        { label: "Risco alto ausente", passed: true },
-        { label: "Confirmação de candle", passed: signal !== "WAIT" }
-      ],
-      warning: "Modo mock não analisa mercado real. Configure OpenRouter para visão real."
-    });
+    return {
+      analysis: aiAnalysisSchema.parse({
+        signal,
+        confidence: signal === "WAIT" ? 58 : 76,
+        riskLevel: signal === "WAIT" ? "MEDIUM" : "LOW",
+        marketCondition: signal === "WAIT" ? "RANGING" : "TRENDING",
+        suggestedExpiry: signal === "WAIT" ? "NONE" : "TWO_MINUTES",
+        reasoning:
+          signal === "WAIT"
+            ? "Modo mock: mercado tratado como lateral ou sem confirmacao suficiente."
+            : "Modo mock: sinal demonstrativo aprovado para validar o fluxo.",
+        checklist: [
+          { label: "Tendencia clara", passed: signal !== "WAIT" },
+          { label: "Mercado nao lateral", passed: signal !== "WAIT" },
+          { label: "Risco alto ausente", passed: true },
+          { label: "Confirmacao de candle", passed: signal !== "WAIT" }
+        ],
+        warning: "Modo mock nao analisa mercado real. Configure provider real."
+      }),
+      providerMode: "MOCK" as const,
+      modelUsed: "mock"
+    };
   }
 }

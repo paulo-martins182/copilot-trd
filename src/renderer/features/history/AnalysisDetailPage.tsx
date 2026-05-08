@@ -15,7 +15,7 @@ export function AnalysisDetailPage({ id }: { id: string }) {
     <div className="h-full overflow-y-auto p-6">
       <div className="mx-auto grid max-w-5xl grid-cols-[1fr_360px] gap-4">
         <AnalysisCard.Root>
-          <AnalysisCard.Header title="Detalhes da análise" description={record ? formatDateTime(record.createdAt) : "Carregando"} />
+          <AnalysisCard.Header title="Detalhes da analise" description={record ? formatDateTime(record.createdAt) : "Carregando"} />
           <AnalysisCard.Signal record={record} />
           <AnalysisCard.Confidence record={record} />
           <AnalysisCard.Reasoning record={record} />
@@ -31,9 +31,17 @@ export function AnalysisDetailPage({ id }: { id: string }) {
               </div>
             ))}
           </div>
-          {record?.snapshotPath ? (
-            <div className="mt-4 text-xs text-muted">Snapshot local: {record.snapshotPath}</div>
+          {record?.decision.blockedBy.length ? (
+            <div className="mt-4 space-y-2">
+              <div className="text-xs uppercase tracking-wide text-muted">Bloqueios</div>
+              {record.decision.blockedBy.map((reason) => (
+                <div key={reason} className="rounded-xl border border-warning/20 bg-warning/10 p-2 text-xs text-amber-200">
+                  {reason}
+                </div>
+              ))}
+            </div>
           ) : null}
+          {record?.snapshotPath ? <div className="mt-4 text-xs text-muted">Snapshot local: {record.snapshotPath}</div> : null}
         </Card>
       </div>
     </div>

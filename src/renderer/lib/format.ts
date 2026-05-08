@@ -1,9 +1,10 @@
-import type { Signal, SuggestedExpiry } from "@shared/domain/entities/Analysis";
+import type { ProviderMode, Signal, SuggestedExpiry } from "@shared/domain/entities/Analysis";
+import type { MarketBias, MacroRiskState } from "@shared/domain/entities/MarketContext";
 
 export function formatSignal(signal: Signal): string {
   return {
-    BUY: "Possível compra",
-    SELL: "Possível venda",
+    BUY: "Possivel compra",
+    SELL: "Possivel venda",
     WAIT: "Aguardar",
     AVOID: "Evitar mercado"
   }[signal];
@@ -31,4 +32,30 @@ export function formatDateTime(value: string): string {
     dateStyle: "short",
     timeStyle: "medium"
   }).format(new Date(value));
+}
+
+export function formatProviderMode(mode: ProviderMode): string {
+  return {
+    REAL: "REAL",
+    MOCK: "MOCK",
+    REAL_PROVIDER_UNAVAILABLE: "REAL OFF",
+    SHADOW_ONLY: "SHADOW"
+  }[mode];
+}
+
+export function formatMarketBias(bias: MarketBias): string {
+  return {
+    BULLISH: "Bullish",
+    BEARISH: "Bearish",
+    NEUTRAL: "Neutral",
+    MIXED: "Mixed"
+  }[bias];
+}
+
+export function formatMacroRisk(risk: MacroRiskState): string {
+  return {
+    LOW: "Risco baixo",
+    MEDIUM: "Risco medio",
+    HIGH: "Risco alto"
+  }[risk];
 }

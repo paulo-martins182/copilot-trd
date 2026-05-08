@@ -59,18 +59,30 @@ export const riskSettingsSchema = z.object({
   staleAfterMs: z.number().int().min(250).max(10000),
   maxOneMinuteLatencyMs: z.number().int().min(100).max(5000),
   alertCooldownMs: z.number().int().min(1000).max(120000),
-  enabledExpiries: z.array(suggestedExpirySchema).min(1)
+  enabledExpiries: z.array(suggestedExpirySchema).min(1),
+  requireRealProvider: z.boolean(),
+  riskFilterOnly: z.boolean(),
+  consensusWindowSize: z.number().int().min(3).max(9),
+  minConsensusScore: z.number().min(0).max(1),
+  minSampleSupport: z.number().int().min(0).max(500),
+  minEmpiricalWinRate: z.number().int().min(0).max(100)
 });
 
-export const openRouterSettingsSchema = z.object({
-  apiKey: z.string().optional(),
+export const aiSettingsSchema = z.object({
+  provider: z.enum(["OPENROUTER", "GOOGLE"]),
+  openRouterApiKey: z.string().optional(),
+  googleApiKey: z.string().optional(),
   model: z.string().min(1),
   fallbackModel: z.string().min(1),
   useMockProvider: z.boolean()
 });
 
+export const openRouterSettingsSchema = aiSettingsSchema;
+
 export const browserSettingsSchema = z.object({
-  defaultUrl: z.string().url()
+  defaultUrl: z.string().url(),
+  targetAsset: z.string().min(1),
+  targetExpiry: suggestedExpirySchema
 });
 
 export const tradeJournalCreateSchema = z.object({
@@ -95,4 +107,8 @@ export const historyRequestSchema = z.object({
 
 export const idRequestSchema = z.object({
   id: z.string().min(1)
+});
+
+export const setupLabelRequestSchema = z.object({
+  setupLabel: z.string().min(1)
 });

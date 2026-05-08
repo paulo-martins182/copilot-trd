@@ -6,7 +6,8 @@ MVP desktop em Electron + React para atuar como copiloto analítico visual em gr
 
 - Abre o TradingView dentro do app usando `WebContentsView`.
 - Captura uma região do gráfico via `webContents.capturePage(rect)`.
-- Envia frames para OpenRouter usando modelos vision free com JSON estruturado.
+- Permite escolher `OpenRouter` ou `Google AI (Gemini)` na tela de configurações.
+- Envia frames para o provider selecionado com saída JSON estruturada.
 - Aplica regras locais conservadoras antes de exibir qualquer sinal.
 - Emite alerta visual + som para `BUY`/`SELL` aprovados.
 - Sugere expiração `1m`, `2m` ou `5m` e valor máximo baseado em risco configurado.
@@ -32,16 +33,20 @@ npm run build
 ## Configuração rápida
 
 1. Abra `Configurações`.
-2. Informe `OPENROUTER_API_KEY` na tela ou deixe vazio para usar provider mock.
+2. Escolha o `Provider`.
+3. Informe a API key correspondente e selecione `Modelo principal` e `Fallback`.
 3. Ajuste banca, risco por operação, confiança mínima e latência máxima.
 4. Abra `Browser Copilot`.
 5. Confirme a URL do TradingView.
 6. Ajuste a região do gráfico e clique em `Ativar copiloto`.
 
-## IA free via OpenRouter
+## Providers suportados
 
-- Modelo principal padrão: `google/gemma-4-31b-it:free`.
-- Fallback padrão: `openrouter/free`, que filtra modelos free compatíveis com visão/structured outputs quando possível.
+- OpenRouter:
+  - principal padrão: `google/gemma-4-26b-a4b-it:free`
+  - fallback padrão: `google/gemma-4-31b-it:free`
+- Google AI:
+  - opções prontas para Gemini com visão + structured output.
 - Free tiers podem ter rate limits, indisponibilidade temporária e latência maior.
 
 ## Segurança

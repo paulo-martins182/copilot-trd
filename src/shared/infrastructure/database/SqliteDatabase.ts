@@ -5,6 +5,9 @@ import { dirname } from "node:path";
 import initSqlJs, { type Database } from "sql.js";
 
 type SqlValue = string | number | null;
+interface TableInfoRow {
+  name: string;
+}
 
 export class SqliteDatabase {
   private constructor(
@@ -85,6 +88,7 @@ export class SqliteDatabase {
         latency_ms INTEGER NOT NULL,
         is_stale INTEGER NOT NULL,
         snapshot_path TEXT NOT NULL,
+        setup_label TEXT NOT NULL DEFAULT '',
         ai_json TEXT NOT NULL,
         decision_json TEXT NOT NULL
       );
@@ -110,8 +114,50 @@ export class SqliteDatabase {
         emitted_at TEXT NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS market_context_snapshots (
+        id TEXT PRIMARY KEY,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        market_bias TEXT NOT NULL,
+        risk_state TEXT NOT NULL,
+        volatility_warning INTEGER NOT NULL,
+        major_events_json TEXT NOT NULL,
+        analysis_impact TEXT NOT NULL,
+        headlines_json TEXT NOT NULL,
+        provider_mode TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS shadow_predictions (
+        id TEXT PRIMARY KEY,
+        analysis_id TEXT NOT NULL,
+        source_id TEXT NOT NULL,
+        region_json TEXT NOT NULL,
+        expected_signal TEXT NOT NULL,
+        setup_label TEXT NOT NULL,
+        snapshot_path TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        settle_after TEXT NOT NULL,
+        settled_at TEXT,
+        outcome TEXT,
+        outcome_reason TEXT
+      );
+
       CREATE INDEX IF NOT EXISTS idx_analyses_created_at ON analyses(created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_trade_journal_entry_time ON trade_journal_entries(entry_time DESC);
+      CREATE INDEX IF NOT EXISTS idx_market_context_updated_at ON market_context_snapshots(updated_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_shadow_predictions_source_settle ON shadow_predictions(source_id, settle_after);
+      CREATE INDEX IF NOT EXISTS idx_shadow_predictions_setup ON shadow_predictions(setup_label);
     `);
+
+    this.ensureColumn("analyses", "setup_label", "TEXT NOT NULL DEFAULT ''");
+  }
+
+  private ensureColumn(tableName: string, columnName: string, columnDefinition: string): void {
+    const columns = this.all<TableInfoRow>(`PRAGMA table_info(${tableName})`);
+    const exists = columns.some((column) => column.name === columnName);
+    if (!exists) {
+      this.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnDefinition}`);
+    }
   }
 }
